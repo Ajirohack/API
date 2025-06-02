@@ -1,0 +1,106 @@
+name: SpaceNew API CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          JWT_SECRET_KEY: test_secret_key
+          PLUGIN_DIR: /tmp/plugins
+        run: |
+          mkdir -p /tmp/plugins
+          pytest --cov=. --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v2
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: true
+
+  deploy-staging:
+    needs: test
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build and push Docker image
+        env:
+          DOCKER_REGISTRY: your-registry.azurecr.io
+          IMAGE_NAME: spacenew-api
+        run: |
+          docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:staging .
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login $DOCKER_REGISTRY -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push $DOCKER_REGISTRY/$IMAGE_NAME:staging
+
+      - name: Deploy to staging
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          echo "$KUBE_CONFIG" > kubeconfig.yaml
+          kubectl --kubeconfig=kubeconfig.yaml set image deployment/spacenew-api spacenew-api=$DOCKER_REGISTRY/$IMAGE_NAME:staging
+
+  deploy-production:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build and push Docker image
+        env:
+          DOCKER_REGISTRY: your-registry.azurecr.io
+          IMAGE_NAME: spacenew-api
+        run: |
+          docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:${{ github.sha }} .
+          docker tag $DOCKER_REGISTRY/$IMAGE_NAME:${{ github.sha }} $DOCKER_REGISTRY/$IMAGE_NAME:latest
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login $DOCKER_REGISTRY -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push $DOCKER_REGISTRY/$IMAGE_NAME:${{ github.sha }}
+          docker push $DOCKER_REGISTRY/$IMAGE_NAME:latest
+
+      - name: Deploy to production
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG_PROD }}
+        run: |
+          echo "$KUBE_CONFIG" > kubeconfig.yaml
+          kubectl --kubeconfig=kubeconfig.yaml set image deployment/spacenew-api spacenew-api=$DOCKER_REGISTRY/$IMAGE_NAME:${{ github.sha }}

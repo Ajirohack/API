@@ -1,0 +1,85 @@
+{
+  "id": "financial_business.funds_transferred",
+  "name": "Funds Transferred Workflow",
+  "description": "Workflow triggered when funds are transferred between accounts",
+  "version": "1.0.0",
+  "trigger": {
+    "type": "event",
+    "event": "financial_business.transaction.completed",
+    "condition": "event.transaction_type == 'transfer'"
+  },
+  "actions": [
+    {
+      "id": "notify_admin",
+      "type": "notification",
+      "target": "admin",
+      "template": "funds_transferred",
+      "channel": "email",
+      "data": {
+        "subject": "Funds Transfer Completed",
+        "message": "A funds transfer of {{event.amount}} {{event.currency}} has been completed. Transaction ID: {{event.transaction_id}}",
+        "priority": "normal"
+      }
+    },
+    {
+      "id": "log_transaction",
+      "type": "system",
+      "action": "log",
+      "data": {
+        "level": "info",
+        "message": "Funds transfer completed: {{event.transaction_id}}",
+        "details": {
+          "amount": "{{event.amount}}",
+          "currency": "{{event.currency}}",
+          "source_account": "{{event.source_account}}",
+          "destination_account": "{{event.destination_account}}",
+          "timestamp": "{{event.timestamp}}"
+        }
+      }
+    },
+    {
+      "id": "update_metrics",
+      "type": "service",
+      "service": "metrics",
+      "action": "increment",
+      "data": {
+        "metric": "financial_business.transfers.count",
+        "value": 1,
+        "dimensions": {
+          "currency": "{{event.currency}}",
+          "amount_range": "{{event.amount_range}}"
+        }
+      }
+    }
+  ],
+  "error_handler": {
+    "actions": [
+      {
+        "id": "notify_error",
+        "type": "notification",
+        "target": "admin",
+        "template": "workflow_error",
+        "channel": "email",
+        "data": {
+          "subject": "Workflow Error: Funds Transfer",
+          "message": "An error occurred while processing the funds transfer workflow: {{error.message}}",
+          "priority": "high"
+        }
+      },
+      {
+        "id": "log_error",
+        "type": "system",
+        "action": "log",
+        "data": {
+          "level": "error",
+          "message": "Funds transfer workflow error: {{error.message}}",
+          "details": {
+            "workflow_id": "financial_business.funds_transferred",
+            "error_type": "{{error.type}}",
+            "transaction_id": "{{event.transaction_id}}"
+          }
+        }
+      }
+    ]
+  }
+}

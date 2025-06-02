@@ -1,0 +1,16 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+python-dotenv==1.0.0
+pydantic==2.5.1
+redis==5.0.1
+pytest==7.4.3
+httpx==0.25.1
+python-jwt==4.0.0
+fastapi-mcp==0.1.0  # This is a placeholder, you might need to implement this package
+slowapi==0.1.8
+psutil==5.9.6

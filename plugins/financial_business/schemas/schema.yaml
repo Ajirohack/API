@@ -1,0 +1,9 @@
+# Financial Business Plugin Data Schema
+
+account:
+  id: integer
+  balance: float
+  currency: string
+admin_users:
+  user_id: integer
+  name: string
