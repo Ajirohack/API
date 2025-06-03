@@ -4,7 +4,7 @@ Enables tool/agent interoperability via the Model Context Protocol standard.
 """
 from fastapi import APIRouter, Request, HTTPException, Depends, status
 from fastapi.responses import JSONResponse
-from fastapi_mcp import FastApiMCP
+# Removed fastapi_mcp import due to dependency conflicts
 from typing import Dict, Any, Optional
 import logging
 from pydantic import BaseModel, Field

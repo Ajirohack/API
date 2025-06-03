@@ -12,7 +12,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from routes import auth, health, metrics, plugin_system
+from routes import auth, health, metrics, plugin_system, fmt_templates, character_profiles, engine, storage, interface_adapter, endpoint_status
+from mcp_adapter import router as mcp_router
 from core.logging import setup_logging
 from core.middleware.logging import RequestLoggingMiddleware
 from config.settings import settings
@@ -82,8 +83,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 app.include_router(auth.router, prefix="/api")
 app.include_router(health.router, prefix="/api")
 app.include_router(metrics.router, prefix="/api")
-# app.include_router(engine.router, prefix="/api")  # Temporarily disabled
+app.include_router(engine.router, prefix="/api")
 app.include_router(plugin_system.router, prefix="/api")
+app.include_router(fmt_templates.router, prefix="/api")
+app.include_router(character_profiles.router, prefix="/api")
+app.include_router(storage.router, prefix="/api")
+app.include_router(interface_adapter.router, prefix="/api")
+app.include_router(endpoint_status.router, prefix="/api")
+app.include_router(mcp_router)
 
 if __name__ == "__main__":
     import uvicorn

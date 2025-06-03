@@ -11,6 +11,10 @@ redis==5.0.1
 pytest==7.4.3
 httpx==0.25.1
 python-jwt==4.0.0
-fastapi-mcp==0.1.0  # This is a placeholder, you might need to implement this package
+# Removed fastapi-mcp due to dependency conflicts
+# We'll implement the MCP functionality directly
+anyio>=3.7.1,<4.0.0
 slowapi==0.1.8
 psutil==5.9.6
+pydantic-settings==2.0.3
+alembic==1.12.0

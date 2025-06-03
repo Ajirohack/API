@@ -48,4 +48,4 @@ HEALTHCHECK --interval=30s --timeout=3s \
     CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
 # Run the application with proper concurrency and worker configuration
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers 4 --log-config config/logging.conf"]
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT} --workers 4 --log-config config/logging.conf"]
