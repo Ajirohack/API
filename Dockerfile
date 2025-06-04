@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
+# Copy and install dependencies in builder stage
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -40,12 +40,17 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
 # Create necessary directories with correct permissions
-RUN mkdir -p /app/logs /app/plugins
-RUN chmod 755 /app/logs /app/plugins
+RUN mkdir -p /app/logs /app/plugins /app/data
+RUN chmod 755 /app/logs /app/plugins /app/data
+
+# Install curl for health check
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+USER api
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s \
     CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
 # Run the application with proper concurrency and worker configuration
-CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT} --workers 4 --log-config config/logging.conf"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers 4 --log-config config/logging.conf"]

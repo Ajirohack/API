@@ -10,11 +10,11 @@ from fastapi.openapi.docs import get_swagger_ui_html
 
 # Import route modules for API initialization
 # These modules will be imported when the routes package is imported
-# from . import character_profiles  # Temporarily disabled
+from . import character_profiles  # Re-enabled for compatibility
 from . import fmt_templates
 from . import health
 from . import metrics
-# from . import engine  # Temporarily disabled due to missing dependencies
+from . import engine  # Re-enabled for compatibility
 from . import plugin_system
 from . import auth
 

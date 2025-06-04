@@ -13,7 +13,12 @@ import time
 import uuid
 from database.connection import get_db_session
 from sqlalchemy.orm import Session
-from api.security import validate_ws_token, get_ws_user
+import sys
+import os
+
+# Add the parent directory to sys.path to allow absolute imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from security import validate_ws_token, get_ws_user
 
 router = APIRouter(tags=["interface"])
 event_bus = EventBus()

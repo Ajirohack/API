@@ -4,6 +4,7 @@ Unified Storage API endpoints for Archivist
 """
 from fastapi import APIRouter, Query
 import os
+import json
 
 router = APIRouter(tags=["storage"])
 
@@ -58,29 +59,33 @@ def get_postgres_adapter():
 @router.post("/api/storage/vector_search")
 def vector_search(collection: str = Query(...), query_vector: list = Query(...), limit: int = 5):
     # For demo: use Qdrant adapter
-    qdrant = QdrantAdapter()
+    qdrant = get_qdrant_adapter()
     results = qdrant.search_vectors(collection, query_vector, limit)
     return {"results": results}
 
 # Graph query endpoint (Neo4j)
 @router.post("/api/storage/graph_query")
 def graph_query(cypher: str = Query(...)):
-    neo4j = Neo4jAdapter()
+    neo4j = get_neo4j_adapter()
     # For demo: run a cypher query and return results
     results = neo4j.run_query(cypher)
     return {"results": results}
 
 # Event tracking endpoint (Postgres)
 @router.post("/api/storage/track_event")
-def track_event(event_type: str = Query(...), payload: dict = Query(...)):
-    pg = PostgresAdapter(os.getenv("POSTGRES_DSN", ""))
+def track_event(event_type: str = Query(...), payload: str = Query(...)):
+    pg = get_postgres_adapter()
     # For demo: insert event into event_log table
-    pg.set("event_log", event_type, payload)
+    try:
+        payload_dict = json.loads(payload)
+    except:
+        payload_dict = {"raw": payload}
+    pg.set("event_log", event_type, payload_dict)
     return {"status": "ok"}
 
 # Cache endpoint (Redis)
 @router.post("/api/storage/cache")
 def cache_set(key: str = Query(...), value: str = Query(...)):
-    redis = RedisAdapter()
+    redis = get_redis_adapter()
     redis.set(key, value)
     return {"status": "ok"}

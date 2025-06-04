@@ -20,6 +20,45 @@ router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 # Initialize context provider
 context_provider = ContextProvider()
 
+@router.get("/health")
+async def health_check():
+    """
+    Health check endpoint for the MCP adapter.
+    Verifies that the adapter and its context provider are functioning correctly.
+    """
+    try:
+        # Generate a test context ID
+        test_id = generate_context_id("health")
+        
+        # Test storing and retrieving context
+        test_data = {"status": "healthy", "timestamp": datetime.now().isoformat()}
+        await context_provider.store(test_id, test_data)
+        retrieved = await context_provider.retrieve(test_id)
+        
+        # Clean up test data
+        await context_provider.delete(test_id)
+        
+        # Verify the test worked
+        if retrieved and retrieved.get("status") == "healthy":
+            return {
+                "status": "healthy",
+                "message": "MCP adapter is functioning correctly",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "status": "degraded",
+                "message": "Context provider test failed",
+                "timestamp": datetime.now().isoformat()
+            }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "message": f"MCP adapter error: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
 def generate_context_id(prefix: str) -> str:
     """Generate a unique context ID with prefix"""
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -142,7 +181,7 @@ async def mcp_tool_invoke(request: Request, tool_data: ToolRequest):
         )
 
 @router.post("/context/update")
-async def update_context(request: Request, update_data: ContextUpdateRequest):
+async def update_context_endpoint(request: Request, update_data: ContextUpdateRequest):
     """
     Handle context update requests from external components.
     """
@@ -150,7 +189,27 @@ async def update_context(request: Request, update_data: ContextUpdateRequest):
         logger.info(f"Received context update request for ID: {update_data.context_id}")
         
         # Process the context update
-        updated_context = await process_context_update(update_data)
+        # Retrieve existing context
+        context = await retrieve_context(update_data.context_id)
+        if not context:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Context not found: {update_data.context_id}"
+            )
+        
+        # Update context
+        updated_context = await update_context(update_data.context_id, update_data.updates)
+        
+        # Apply metadata updates if provided
+        if update_data.metadata:
+            # If context already has metadata, merge with new metadata
+            if "metadata" in updated_context:
+                updated_metadata = deep_merge(updated_context["metadata"], update_data.metadata)
+            else:
+                updated_metadata = update_data.metadata
+            
+            await update_context(update_data.context_id, {"metadata": updated_metadata})
+            updated_context["metadata"] = updated_metadata
         
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -399,10 +458,214 @@ async def process_system_context(data: Dict[str, Any], metadata: Dict[str, Any])
 
 async def execute_tool(tool_data: ToolRequest) -> Dict[str, Any]:
     """Execute the requested tool with given parameters."""
-    # TODO: Implement tool execution logic
-    return {"executed": True, "result": f"Tool {tool_data.tool_name} executed"}
+    
+    # Dictionary of available tools
+    tools = {
+        "text_summarizer": execute_text_summarizer,
+        "sentiment_analyzer": execute_sentiment_analyzer,
+        "question_answerer": execute_question_answerer,
+        "translation": execute_translation,
+        "extraction": execute_extraction
+    }
+    
+    # Check if tool exists
+    if tool_data.tool_name not in tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tool not found: {tool_data.tool_name}"
+        )
+    
+    # Get context if provided
+    context = None
+    if tool_data.context_id:
+        context = await retrieve_context(tool_data.context_id)
+        if not context:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Context not found: {tool_data.context_id}"
+            )
+    
+    # Execute the tool
+    tool_fn = tools[tool_data.tool_name]
+    result = await tool_fn(tool_data.parameters, context)
+    
+    # Generate and store execution record
+    execution_id = generate_context_id("tool-exec")
+    execution_record = {
+        "id": execution_id,
+        "tool": tool_data.tool_name,
+        "parameters": tool_data.parameters,
+        "context_id": tool_data.context_id,
+        "result": result,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    await store_context(execution_id, execution_record)
+    
+    return {
+        "execution_id": execution_id,
+        "tool": tool_data.tool_name,
+        "result": result
+    }
 
-async def process_context_update(update_data: ContextUpdateRequest) -> Dict[str, Any]:
-    """Process context updates."""
-    # TODO: Implement context update logic
-    return {"updated": True, "context_id": update_data.context_id}
+async def execute_text_summarizer(parameters: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Summarize text content"""
+    text = parameters.get("text", "")
+    max_length = parameters.get("max_length", 100)
+    
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text parameter is required"
+        )
+    
+    # Simple summarization (in production would use proper NLP)
+    if len(text) <= max_length:
+        summary = text
+    else:
+        # Very basic summarization - first sentence plus length restriction
+        sentences = text.split(".")
+        summary = sentences[0] + "."
+        if len(summary) < max_length and len(sentences) > 1:
+            summary += " " + sentences[1] + "."
+        summary = summary[:max_length] + ("..." if len(summary) > max_length else "")
+    
+    return {
+        "summary": summary,
+        "original_length": len(text),
+        "summary_length": len(summary)
+    }
+
+async def execute_sentiment_analyzer(parameters: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Analyze sentiment of text"""
+    text = parameters.get("text", "")
+    
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text parameter is required"
+        )
+    
+    # Simple sentiment analysis (in production would use proper NLP)
+    positive_words = ["good", "great", "excellent", "happy", "like", "love", "best"]
+    negative_words = ["bad", "terrible", "awful", "hate", "dislike", "worst"]
+    
+    text_lower = text.lower()
+    
+    pos_count = sum(1 for word in positive_words if word in text_lower)
+    neg_count = sum(1 for word in negative_words if word in text_lower)
+    
+    total = pos_count + neg_count
+    if total == 0:
+        sentiment = "neutral"
+        score = 0.0
+    else:
+        score = (pos_count - neg_count) / total
+        if score > 0.2:
+            sentiment = "positive"
+        elif score < -0.2:
+            sentiment = "negative"
+        else:
+            sentiment = "neutral"
+    
+    return {
+        "sentiment": sentiment,
+        "score": score,
+        "details": {
+            "positive_matches": pos_count,
+            "negative_matches": neg_count
+        }
+    }
+
+async def execute_question_answerer(parameters: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Answer questions based on context"""
+    question = parameters.get("question", "")
+    
+    if not question:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Question parameter is required"
+        )
+    
+    # Use context if available
+    context_content = ""
+    if context and "content" in context:
+        context_content = context["content"]
+    
+    # Simple demo response
+    return {
+        "answer": "This is a placeholder answer. In production, this would use an actual QA model.",
+        "confidence": 0.7,
+        "sources": []
+    }
+
+async def execute_translation(parameters: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Translate text between languages"""
+    text = parameters.get("text", "")
+    source_lang = parameters.get("source_lang", "auto")
+    target_lang = parameters.get("target_lang", "en")
+    
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text parameter is required"
+        )
+    
+    if not target_lang:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Target language parameter is required"
+        )
+    
+    # Simple demo response
+    return {
+        "translated_text": f"[Translation of '{text}' from {source_lang} to {target_lang}]",
+        "detected_source_lang": source_lang if source_lang != "auto" else "en",
+        "target_lang": target_lang
+    }
+
+async def execute_extraction(parameters: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Extract structured information from text"""
+    text = parameters.get("text", "")
+    extract_type = parameters.get("type", "entities")
+    
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text parameter is required"
+        )
+    
+    # Simple entity extraction (for demonstration)
+    if extract_type == "entities":
+        # Very simple entity recognition
+        potential_entities = text.split()
+        entities = [
+            word for word in potential_entities 
+            if word and word[0].isupper() and len(word) > 1
+        ]
+        
+        return {
+            "entities": entities,
+            "count": len(entities)
+        }
+    
+    # Simple keyword extraction
+    elif extract_type == "keywords":
+        # Very simple keyword extraction
+        words = text.lower().split()
+        stopwords = ["the", "a", "an", "in", "on", "at", "to", "for", "with", "by", "about", "like"]
+        keywords = [
+            word for word in words 
+            if word and len(word) > 3 and word not in stopwords
+        ]
+        
+        return {
+            "keywords": keywords[:10],  # Limit to top 10
+            "count": len(keywords)
+        }
+    
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported extraction type: {extract_type}"
+        )

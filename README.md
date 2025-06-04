@@ -7,6 +7,40 @@ This directory contains all API services for the "the-space" architecture. Each 
 - **control-center/**: Main backend API for admin, modules, and orchestration.
 - **frontend-engine/**: API for user-facing frontend and dashboard.
 - **system-engine/**: System-level API for workflows and automation.
+- **mcp_adapter.py**: Model Context Protocol adapter for AI model and tool interoperability.
+
+## Deployment
+
+The API can be deployed using Docker and Docker Compose with the included `deploy.sh` script:
+
+```bash
+# Basic deployment
+./deploy.sh
+
+# Deploy and run MCP endpoint tests
+./deploy.sh --test-endpoints
+```
+
+The deployment script performs these steps:
+
+1. Checks for dependencies (Docker, Docker Compose)
+2. Verifies port availability (PostgreSQL, Redis, API)
+3. Builds and starts the containers
+4. Initializes the database
+5. Verifies MCP adapter health
+6. Runs internal functionality tests
+7. Optionally runs HTTP endpoint tests (with --test-endpoints)
+
+## Testing and Integration
+
+Testing the API is straightforward using the provided scripts:
+
+- **MCP Adapter Testing**:  
+  - `scripts/test_mcp_direct.py` - Test core MCP functionality directly
+  - `scripts/test_mcp_endpoints.sh` - Test MCP HTTP endpoints
+  - `scripts/model_manager.py` - Example integrations with the MCP adapter
+  
+For detailed instructions, see [MCP Adapter Documentation](docs/mcp_adapter.md).
 
 ## Implementation Status
 
@@ -21,9 +55,20 @@ This directory contains all API services for the "the-space" architecture. Each 
 
 This document provides an overview of the SpaceNew API, including pluginized apps, admin/control-center endpoints, and guidance for plugin authors. All endpoints are discoverable via OpenAPI/Swagger and the `/api/plugins` discovery endpoints.
 
----
+## Core API Components
 
-## Pluginized Apps
+### Model Context Protocol (MCP) Adapter
+
+The MCP adapter (`/api/mcp/*`) provides standardized endpoints for AI model interoperability, tool invocation, and context management following the Model Context Protocol pattern. See [MCP Adapter Documentation](docs/mcp_adapter.md) for details.
+
+Key features:
+
+- Context creation and management
+- Tool invocation with standardized interfaces
+- Model registration and prediction
+- Structured context passing between components
+
+### Plugin System
 
 Each plugin is self-contained with its own manifest and API routes. Below is a summary of available plugins and their endpoints.
 

@@ -18,7 +18,7 @@ import logging
 from database.connection import get_db_session
 from database.models.user import User
 from database.models.token import RevokedToken
-from .config.settings import settings
+from config.settings import settings
 
 # Configure logging
 logger = logging.getLogger(__name__)
